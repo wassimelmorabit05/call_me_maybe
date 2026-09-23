@@ -1,0 +1,21 @@
+[project]
+name = "function-calling-project"
+version = "0.1.0"
+description = "Function calling tool using constrained decoding with a small LLM"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24.0",
+    "pydantic>=2.0.0",
+    "llm-sdk",
+    "torch<=2.2.2 ; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
+
+[tool.uv.sources]
+llm-sdk = { path = "./llm_sdk", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
