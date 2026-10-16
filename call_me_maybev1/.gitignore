@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# uv
+.uv/
+
+# Project-specific
+data/output/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
