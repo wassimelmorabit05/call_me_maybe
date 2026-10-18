@@ -1,7 +1,7 @@
 # ABOUTME: Unit tests for DecodingState classes (ChoiceState, NumberState, StringState).
 # ABOUTME: Pure logic tests, no model or vocabulary required.
 
-from src.decoding_states import ChoiceState, NumberState, StringState
+from src.decoding_states import ChoiceState, IntegerState, NumberState, StringState
 
 
 class TestChoiceState:
@@ -83,18 +83,46 @@ class TestNumberState:
         assert state.can_stop() is True
 
 
+class TestIntegerState:
+    def test_digits_are_valid(self) -> None:
+        state = IntegerState()
+        assert state.is_valid_addition("4") is True
+
+    def test_decimal_point_is_invalid(self) -> None:
+        state = IntegerState()
+        state.accept("4")
+        assert state.is_valid_addition(".") is False
+
+    def test_cannot_stop_when_empty_or_just_minus(self) -> None:
+        state = IntegerState()
+        assert state.can_stop() is False
+        state.accept("-")
+        assert state.can_stop() is False
+
+    def test_can_stop_after_digits(self) -> None:
+        state = IntegerState()
+        state.accept("42")
+        assert state.can_stop() is True
+
+    def test_negative_integer(self) -> None:
+        state = IntegerState()
+        state.accept("-")
+        state.accept("7")
+        assert state.can_stop() is True
+
+
 class TestStringState:
-    def test_quote_is_invalid(self) -> None:
+    def test_bare_quote_is_invalid(self) -> None:
         state = StringState()
         assert state.is_valid_addition('"') is False
-
-    def test_backslash_is_invalid(self) -> None:
-        state = StringState()
-        assert state.is_valid_addition("\\") is False
 
     def test_plain_text_is_valid(self) -> None:
         state = StringState()
         assert state.is_valid_addition("hello") is True
+
+    def test_single_backslash_is_valid_as_escape_start(self) -> None:
+        state = StringState()
+        assert state.is_valid_addition("\\") is True
 
     def test_empty_string_can_stop(self) -> None:
         state = StringState()
@@ -104,3 +132,36 @@ class TestStringState:
         state = StringState()
         state.accept("hello")
         assert state.can_stop() is True
+
+    def test_cannot_stop_mid_escape(self) -> None:
+        state = StringState()
+        state.accept("\\")
+        assert state.can_stop() is False
+
+    def test_only_quote_or_backslash_allowed_right_after_a_backslash(self) -> None:
+        state = StringState()
+        state.accept("\\")
+        assert state.is_valid_addition("n") is False
+        assert state.is_valid_addition('"') is True
+        assert state.is_valid_addition("\\") is True
+
+    def test_unescape_handles_escaped_quote(self) -> None:
+        # Raw generated text for: Say "hello" -> Say \"hello\"
+        state = StringState()
+        for ch in 'Say \\"hello\\"':
+            state.accept(ch)
+        assert state.unescape() == 'Say "hello"'
+
+    def test_unescape_handles_literal_backslash_in_regex(self) -> None:
+        # Raw generated text for the value \d+ -> \\d+
+        state = StringState()
+        for ch in "\\\\d+":
+            state.accept(ch)
+        assert state.unescape() == "\\d+"
+
+    def test_unescape_handles_windows_path(self) -> None:
+        # Raw generated text for: C:\Users\john -> C:\\Users\\john
+        state = StringState()
+        for ch in "C:\\\\Users\\\\john":
+            state.accept(ch)
+        assert state.unescape() == "C:\\Users\\john"

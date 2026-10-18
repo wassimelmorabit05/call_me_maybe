@@ -87,6 +87,42 @@ def test_generate_function_call_add_numbers() -> None:
     assert result.prompt == prompt
 
 
+def test_generate_function_call_string_with_escaped_backslash() -> None:
+    """A string parameter whose value must contain a literal backslash (e.g. a
+    regex like \\d+) requires the model to emit the doubled-backslash JSON
+    escape sequence. This exercises the StringState escaping fix.
+    """
+    prompt = "Replace all digits with X"
+    functions = [
+        FunctionDefinition(
+            name="fn_regex",
+            description="Apply a regex pattern.",
+            parameters={"pattern": ParameterSchema(type="string")},
+            returns=ReturnsSchema(type="string"),
+        ),
+    ]
+
+    instruction = _build_instruction_prompt(prompt, functions)
+    # Raw template text: the value must contain an escaped backslash (\\) so
+    # that, after unescaping, the actual parameter value is the 2-character
+    # string \d (one backslash followed by "d").
+    full_target = instruction + '\n{"name": "fn_regex", "parameters": {"pattern": "' + "\\\\d" + '"}}'
+
+    token_text_cache = {
+        0: "fn_regex",
+        1: '"',
+        2: "\\",
+        3: "d",
+        4: "}",
+    }
+    model = ScriptedModel(full_target, token_text_cache)
+
+    result = generate_function_call(prompt, model, token_text_cache, functions)
+
+    assert result.name == "fn_regex"
+    assert result.parameters == {"pattern": "\\d"}  # single backslash + "d"
+
+
 def test_generate_function_call_greet() -> None:
     prompt = "Greet john"
     functions = _function_definitions()

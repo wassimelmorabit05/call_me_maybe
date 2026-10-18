@@ -1,5 +1,12 @@
 # ABOUTME: Functions to load and validate the project's JSON input files.
 # ABOUTME: Wraps file I/O, JSON parsing, and pydantic validation into clear, catchable errors.
+#
+# WHY THIS FILE EXISTS (read this first):
+# The subject requires that bad input files (missing, broken JSON, wrong
+# shape) never crash the program and always give a clear message. Rather
+# than scattering try/except everywhere, every possible failure in reading
+# EITHER input file funnels into ONE exception type: InputFileError. The
+# caller (src/__main__.py) only has to catch that one thing.
 
 import json
 from pathlib import Path
@@ -10,23 +17,19 @@ from src.models import FunctionDefinition, TestPrompt
 
 
 class InputFileError(Exception):
-    """Raised when an input file is missing, not valid JSON, or does not match
-    the expected schema. Carries a human-readable message safe to show the user.
+    """Any problem with an input file: missing, invalid JSON, or wrong shape.
+
+    The message is written to be shown directly to a user (no internal
+    jargon), since __main__.py just prints str(exc) as-is.
     """
 
 
 def _read_json_array(path: Path) -> list[dict]:
-    """Read a file and parse it as a JSON array.
+    """Read a file and parse it, expecting a JSON array ([...]) at the top.
 
-    Args:
-        path: Path to the JSON file to read.
-
-    Returns:
-        The parsed JSON content as a list of dictionaries.
-
-    Raises:
-        InputFileError: If the file is missing, unreadable, not valid JSON,
-            or its top-level structure is not a JSON array.
+    Both of this project's input files are JSON arrays of objects, so this
+    one helper is shared by both load_functions_definition() and
+    load_test_prompts() below.
     """
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -47,20 +50,23 @@ def _read_json_array(path: Path) -> list[dict]:
 
 
 def load_functions_definition(path: Path) -> list[FunctionDefinition]:
-    """Load and validate the function definitions file.
+    """Load and validate functions_definition.json.
 
     Args:
-        path: Path to functions_definition.json.
+        path: Path to the file.
 
     Returns:
-        A list of validated FunctionDefinition objects.
+        One FunctionDefinition (a validated pydantic object) per entry.
 
     Raises:
-        InputFileError: If the file is missing, invalid JSON, or does not
-            match the expected schema.
+        InputFileError: File missing/unreadable, invalid JSON, or an entry
+            doesn't match the expected schema (e.g. a missing field).
     """
     raw_items = _read_json_array(path)
     try:
+        # model_validate() is pydantic's way of turning a plain dict into a
+        # checked object - it raises ValidationError with a clear message
+        # if anything doesn't match (wrong type, missing field, etc.).
         return [FunctionDefinition.model_validate(item) for item in raw_items]
     except ValidationError as exc:
         raise InputFileError(
@@ -69,17 +75,17 @@ def load_functions_definition(path: Path) -> list[FunctionDefinition]:
 
 
 def load_test_prompts(path: Path) -> list[TestPrompt]:
-    """Load and validate the test prompts file.
+    """Load and validate function_calling_tests.json.
 
     Args:
-        path: Path to function_calling_tests.json.
+        path: Path to the file.
 
     Returns:
-        A list of validated TestPrompt objects.
+        One TestPrompt per entry.
 
     Raises:
-        InputFileError: If the file is missing, invalid JSON, or does not
-            match the expected schema.
+        InputFileError: File missing/unreadable, invalid JSON, or an entry
+            doesn't match the expected schema.
     """
     raw_items = _read_json_array(path)
     try:
