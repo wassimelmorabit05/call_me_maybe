@@ -1,0 +1,30 @@
+[project]
+name = "call-me-maybe"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "ahamouda"}
+]
+requires-python = ">=3.10"
+dependencies = [
+    "llm-sdk",
+    "torch==2.2.2",
+    "pydantic>=2.12.0",
+    "transformers>=4.45.0,<5.0.0",
+    "huggingface-hub>=0.20.0",
+    "uv",
+    "flake8",
+    "mypy",
+    "pydantic",
+    "numpy<2.0",
+]
+
+[tool.uv.sources]
+llm-sdk = {path = "llm_sdk"}
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
