@@ -73,6 +73,7 @@ def generate_numeric_value(
     token_text_cache: dict[int, str],
     stop_boundary_text: str,
     is_integer: bool,
+    visualize: bool = False,
 ) -> tuple[float | int, str]:
     """Generate a number or integer value, letting the model decide when to stop.
 
@@ -125,8 +126,16 @@ def generate_numeric_value(
 
         masked = mask_logits(logits, candidate_ids)
         next_id = select_next_token(masked)
+        stopped = next_id in boundary_ids and next_id not in valid_ids
 
-        if next_id in boundary_ids and next_id not in valid_ids:
+        if visualize:
+            print(
+                f"    [number] candidates={len(candidate_ids)} "
+                f"(value={len(valid_ids)}, stop={len(boundary_ids)})  "
+                f"{'STOP' if stopped else 'PICK'} -> {token_text_cache[next_id]!r}"
+            )
+
+        if stopped:
             value = int(generated) if is_integer else float(generated)
             return value, text_so_far
 
@@ -134,7 +143,9 @@ def generate_numeric_value(
         generated += addition
         text_so_far += addition
 
-    raise ValueError("Numeric value did not complete within the token limit")
+    raise ValueError(
+        f"Numeric value did not complete within the token limit (partial: {generated!r})"
+    )
 
 
 # --- String values (with JSON escape support) -------------------------------
@@ -166,6 +177,43 @@ def _is_valid_string_addition(generated: str, addition: str) -> bool:
     return True
 
 
+def _find_repeating_tail(
+    text: str, min_period: int = 1, max_period: int = 20, min_repeats: int = 3
+) -> tuple[int, int] | None:
+    """Detect a short pattern repeating at the very end of `text`.
+
+    Small models under pure greedy decoding can fall into a degenerate loop
+    (e.g. "cat.*cat.*cat.*..." forever) where the "continue" token keeps
+    outscoring the "stop" token even though the value was already complete.
+    This never happens in NumberState/ChoiceState (both are bounded by
+    construction), but an open-ended string value has no such bound.
+
+    Args:
+        text: The text to inspect (the string value generated so far).
+        min_period: Shortest repeating unit length to consider.
+        max_period: Longest repeating unit length to consider.
+        min_repeats: Minimum number of consecutive repeats to count as a loop.
+
+    Returns:
+        (period, repeat_count) for the longest qualifying repetition found at
+        the tail of `text`, or None if nothing qualifies.
+    """
+    n = len(text)
+    best: tuple[int, int] | None = None
+    for period in range(min_period, max_period + 1):
+        if period * min_repeats > n:
+            break
+        unit = text[n - period:]
+        repeats = 1
+        pos = n - period
+        while pos - period >= 0 and text[pos - period:pos] == unit:
+            repeats += 1
+            pos -= period
+        if repeats >= min_repeats and (best is None or repeats * period > best[0] * best[1]):
+            best = (period, repeats)
+    return best
+
+
 def _unescape_string(text: str) -> str:
     """Decode the raw generated text (with \\" and \\\\ escapes) into the
     actual string value.
@@ -187,6 +235,7 @@ def generate_string_value(
     model: Any,
     token_text_cache: dict[int, str],
     stop_boundary_text: str = '"',
+    visualize: bool = False,
 ) -> tuple[str, str]:
     """Generate a string value, letting the model decide when to stop.
 
@@ -211,6 +260,37 @@ def generate_string_value(
     generated = ""
 
     for _ in range(MAX_VALUE_TOKENS):
+        pending_escape = _pending_escape(generated)
+        boundary_ids: set[int] = set()
+        if not pending_escape:
+            boundary_ids = {
+                token_id
+                for token_id, text in token_text_cache.items()
+                if text == stop_boundary_text
+            }
+
+        # A small model under pure greedy decoding can fall into a repeating
+        # loop (e.g. "cat.*cat.*cat.*...") where "continue" keeps outscoring
+        # "stop" forever, even once stopping is a legal option. Detect that
+        # and force a stop, trimming back to a single clean copy of the
+        # repeated unit, rather than waiting out the full token budget (and
+        # skipping the model call for this step, since we already know what
+        # we're about to do).
+        if boundary_ids:
+            repetition = _find_repeating_tail(generated)
+            if repetition is not None:
+                period, repeats = repetition
+                removed = period * (repeats - 1)
+                generated = generated[: len(generated) - removed]
+                text_so_far = text_so_far[: len(text_so_far) - removed]
+                if visualize:
+                    print(
+                        f"    [string] detected repeating pattern "
+                        f"(period={period}, x{repeats}) - stopping early with "
+                        f"{generated!r}"
+                    )
+                return _unescape_string(generated), text_so_far
+
         input_ids = model.encode(text_so_far).tolist()[0]
         logits = model.get_logits_from_input_ids(input_ids)
 
@@ -219,13 +299,6 @@ def generate_string_value(
             for token_id, text in token_text_cache.items()
             if _is_valid_string_addition(generated, text)
         }
-        boundary_ids: set[int] = set()
-        if not _pending_escape(generated):
-            boundary_ids = {
-                token_id
-                for token_id, text in token_text_cache.items()
-                if text == stop_boundary_text
-            }
 
         candidate_ids = valid_ids | boundary_ids
         if not candidate_ids:
@@ -233,15 +306,26 @@ def generate_string_value(
 
         masked = mask_logits(logits, candidate_ids)
         next_id = select_next_token(masked)
+        stopped = next_id in boundary_ids and next_id not in valid_ids
 
-        if next_id in boundary_ids and next_id not in valid_ids:
+        if visualize:
+            print(
+                f"    [string] candidates={len(candidate_ids)} "
+                f"(value={len(valid_ids)}, stop={len(boundary_ids)})  "
+                f"{'STOP' if stopped else 'PICK'} -> {token_text_cache[next_id]!r}  "
+                f"so_far={generated!r}"
+            )
+
+        if stopped:
             return _unescape_string(generated), text_so_far
 
         addition = token_text_cache[next_id]
         generated += addition
         text_so_far += addition
 
-    raise ValueError("String value did not complete within the token limit")
+    raise ValueError(
+        f"String value did not complete within the token limit (partial: {generated!r})"
+    )
 
 
 # --- Choice values (function name, booleans) --------------------------------
@@ -252,6 +336,7 @@ def generate_choice_value(
     token_text_cache: dict[int, str],
     choices: list[str],
     stop_boundary_text: str,
+    visualize: bool = False,
 ) -> tuple[str, str]:
     """Generate a value constrained to a fixed, known set of strings.
 
@@ -294,15 +379,26 @@ def generate_choice_value(
 
         masked = mask_logits(logits, candidate_ids)
         next_id = select_next_token(masked)
+        stopped = next_id in boundary_ids and next_id not in valid_ids
 
-        if next_id in boundary_ids and next_id not in valid_ids:
+        if visualize:
+            print(
+                f"    [choice] candidates={len(candidate_ids)} "
+                f"(value={len(valid_ids)}, stop={len(boundary_ids)})  "
+                f"{'STOP' if stopped else 'PICK'} -> {token_text_cache[next_id]!r}  "
+                f"so_far={generated!r}"
+            )
+
+        if stopped:
             return generated, text_so_far
 
         addition = token_text_cache[next_id]
         generated += addition
         text_so_far += addition
 
-    raise ValueError("Choice did not complete within the token limit")
+    raise ValueError(
+        f"Choice did not complete within the token limit (partial: {generated!r})"
+    )
 
 
 # --- Full pipeline -----------------------------------------------------------
@@ -340,7 +436,12 @@ def generate_function_call(
     if visualize:
         print(f"  {yellow}Generating function name...{reset}")
     name, text_so_far = generate_choice_value(
-        text_so_far, model, token_text_cache, [fn.name for fn in functions], '"'
+        text_so_far,
+        model,
+        token_text_cache,
+        [fn.name for fn in functions],
+        '"',
+        visualize=visualize,
     )
     text_so_far += '"'
     if visualize:
@@ -360,9 +461,14 @@ def generate_function_call(
         separator = "}" if is_last else ","
         text_so_far += f'"{param_name}": '
 
+        if visualize:
+            print(f"  {yellow}Generating {param_name} ({schema.type})...{reset}")
+
         if schema.type == "string":
             text_so_far += '"'
-            value, text_so_far = generate_string_value(text_so_far, model, token_text_cache)
+            value, text_so_far = generate_string_value(
+                text_so_far, model, token_text_cache, visualize=visualize
+            )
             text_so_far += '"'
         elif schema.type in ("number", "integer"):
             value, text_so_far = generate_numeric_value(
@@ -371,10 +477,16 @@ def generate_function_call(
                 token_text_cache,
                 stop_boundary_text=separator,
                 is_integer=(schema.type == "integer"),
+                visualize=visualize,
             )
         elif schema.type == "boolean":
             text_value, text_so_far = generate_choice_value(
-                text_so_far, model, token_text_cache, ["true", "false"], separator
+                text_so_far,
+                model,
+                token_text_cache,
+                ["true", "false"],
+                separator,
+                visualize=visualize,
             )
             value = text_value == "true"
         else:
