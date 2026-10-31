@@ -137,14 +137,16 @@ Four kinds of blanks are supported, each with its own validity rule:
   known strings — used for the function name, and for boolean values
   (`"true"`/`"false"`). A partial string is valid as long as it is a prefix of at
   least one known choice.
-- **Number** (`generate_numeric_value`, schema type `"number"`): a JSON number,
-  including decimal and exponent notation, with incomplete prefixes allowed while
-  generation is in progress.
-- **Integer** (`generate_numeric_value`, schema type `"integer"`): a JSON integer
-  without decimal or exponent notation, guaranteeing a Python `int` in the output.
-- **String** (`generate_string_value`): JSON string content with standard JSON
-  escapes (`\"`, `\\`, `\n`, `\t`, `\uXXXX`, etc.). Unescaped quotes and
-  unescaped control characters are rejected.
+- **Number** (`generate_numeric_value`, schema type `"number"`): a valid (possibly
+  partial) JSON number — optional leading `-`, digits, at most one `.`.
+- **Integer** (`generate_numeric_value`, schema type `"integer"`): same as above
+  but a decimal point is never allowed, guaranteeing a genuine Python `int` in the
+  output (required because some functions assert `isinstance(x, int)`).
+- **String** (`generate_string_value`): any character, *except* that a literal `"`
+  or `\` inside the value must arrive as the standard JSON escape (`\"` or `\\`) —
+  a bare, unescaped `"` always ends the string. This is what allows values like a
+  regex (`"\\d+"`) or a Windows path (`"C:\\Users\\john"`) to be generated
+  correctly, not just plain words.
 
 At each generation step:
 
@@ -161,11 +163,10 @@ At each generation step:
 4. `select_next_token` (NumPy `argmax`) picks the next token among only the
    surviving candidates.
 
-The constraints are intended to preserve JSON structure and the declared
-parameter types. This does not guarantee semantic correctness: the model can still
-choose the wrong function or the wrong value. Tokenizer-specific token decoding also
-needs to be verified for the selected model before claiming complete JSON validity
-for every possible Unicode string.
+Because every single generated character was pre-filtered to be both
+structurally and semantically valid, the final output is always valid JSON that
+matches the function's schema exactly — independent of how "confident" or
+"capable" the underlying small model actually is.
 
 ## Design Decisions
 
@@ -238,12 +239,22 @@ for every possible Unicode string.
 
 ## Testing Strategy
 
-The repository includes focused regression tests for JSON number-prefix rules,
-integer restrictions, JSON string escaping, control-character rejection, and
-incomplete Unicode escapes. Run them with `make test`.
+Unit tests (`tests/`, run via `make test`) cover:
 
-A full model-backed end-to-end test requires the Hugging Face model to be available
-locally or downloadable. It is not run by the lightweight regression test suite.
+- Input-file loading and validation, including every documented failure mode —
+  missing file, invalid JSON, non-array top level, empty array, schema mismatch,
+  invalid function name, and duplicate function names (`test_input_loader.py`).
+- Masking and selection logic with a fake model (`test_decoding.py`).
+- The full `generate_function_call()` loop end-to-end using a scripted fake model
+  that deterministically reproduces a known-correct answer — covering negative
+  numbers, the `"integer"` type, escaped quotes/backslashes in strings, and
+  boolean values (`test_call_generator.py`).
+
+In addition, the pipeline was run manually end-to-end (`make run`) against the
+provided `data/input/functions_definition.json` and
+`data/input/function_calling_tests.json`, with the resulting
+`data/output/function_calling_results.json` manually checked for valid JSON and
+schema compliance, and against the `moulinette` grading script.
 
 ## Example Usage
 

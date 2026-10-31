@@ -43,13 +43,10 @@ class FunctionDefinition(BaseModel):
     returns: Parameter
 
     @model_validator(mode="after")
-    def validate_names(self) -> "FunctionDefinition":
-        """Ensure function and parameter names are safe Python identifiers."""
+    def validate_name(self) -> "FunctionDefinition":
+        """Reject a function name that isn't a usable Python identifier."""
         if not self.name.isidentifier() or keyword.iskeyword(self.name):
             raise ValueError(f"Invalid function name: '{self.name}'")
-        for parameter_name in self.parameters:
-            if not parameter_name.isidentifier() or keyword.iskeyword(parameter_name):
-                raise ValueError(f"Invalid parameter name: '{parameter_name}'")
         return self
 
 

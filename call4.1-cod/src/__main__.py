@@ -15,7 +15,7 @@ from src.input_loader import validate_functions, validate_prompts
 from src.models import FunctionCallResult
 
 GREEN = "\033[32m"
-BLUE = "\033[34m"
+YELLOW = "\033[33m"
 RED = "\033[31m"
 RESET = "\033[0m"
 
@@ -70,7 +70,7 @@ def run(args: argparse.Namespace) -> int:
     results: list[dict] = []
     for i, prompt in enumerate(prompts, 1):
         if args.visualize:
-            print(f"\n{BLUE}Prompt {i}/{len(prompts)}:{RESET} {prompt.prompt}")
+            print(f"\n{YELLOW}Prompt {i}/{len(prompts)}:{RESET} {prompt.prompt}")
         try:
             result = generate_function_call(
                 prompt, functions, model, token_text_cache, visualize=args.visualize

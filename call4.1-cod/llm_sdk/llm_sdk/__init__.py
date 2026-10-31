@@ -34,7 +34,7 @@ class Small_LLM_Model:
         *,
         device: str | None = None,
         dtype: torch.dtype | None = None,
-        trust_remote_code: bool = False,
+        trust_remote_code: bool = True,
     ) -> None:
         self._model_name = model_name
 
@@ -63,10 +63,9 @@ class Small_LLM_Model:
         self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=self._dtype,
+            device_map="auto" if self._device == "cuda" else None,
             trust_remote_code=trust_remote_code,
         )
-        # This SDK uses one explicit device. Avoid combining device_map="auto"
-        # with .to(), which can conflict with Accelerate-dispatched models.
         self._model.to(self._device)
         self._model.eval()
 
@@ -84,10 +83,6 @@ class Small_LLM_Model:
     def decode(self, ids: torch.Tensor | list[int]) -> str:
         """Inverse of :py:meth:`encode`. Removes special tokens."""
         if isinstance(ids, torch.Tensor):
-            if ids.ndim == 2:
-                if ids.shape[0] != 1:
-                    raise ValueError("decode() accepts one sequence, not a batch")
-                ids = ids[0]
             ids = ids.tolist()
         return self._tokenizer.decode(ids, skip_special_tokens=True)
 
