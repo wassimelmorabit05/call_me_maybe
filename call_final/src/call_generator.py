@@ -261,6 +261,7 @@ def generate_function_call(
         if visualize:
             print(f"Generating {param_name} ({schema.type})...")
 
+        value: bool | str | float | int
         if schema.type == "string":
             text_so_far += '"'
             value, text_so_far = generate_string_value(

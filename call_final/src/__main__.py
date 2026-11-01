@@ -1,5 +1,5 @@
-# ABOUTME: CLI entry point. Wires together loading, the LLM, constrained decoding,
-# ABOUTME: and output writing. Run as: uv run python -m src [--functions_definition F] [--input F] [--output F]
+# ABOUTME: CLI entry point wiring loading, the LLM, and constrained decoding,
+# ABOUTME: and output writing. Run with `uv run python -m src`.
 
 import argparse
 import json
@@ -24,7 +24,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="src",
-        description="Translate natural-language prompts into structured function calls.",
+        description=(
+            "Translate natural-language prompts into function calls."
+        ),
     )
     parser.add_argument(
         "--functions_definition",
@@ -70,21 +72,27 @@ def run(args: argparse.Namespace) -> int:
     results: list[dict] = []
     for i, prompt in enumerate(prompts, 1):
         if args.visualize:
-            print(f"\n{YELLOW}Prompt {i}/{len(prompts)}:{RESET} {prompt.prompt}")
+            print(
+                f"\n{YELLOW}Prompt {i}/{len(prompts)}:{RESET} {prompt.prompt}"
+            )
         try:
             result = generate_function_call(
-                prompt, functions, model, token_text_cache, visualize=args.visualize
+                prompt, functions, model, token_text_cache,
+                visualize=args.visualize,
             )
         except ValueError as e:
             # Never drop a prompt: an external grader may compare outputs to
             # corrections by index, so a missing entry would misalign every
             # test that follows. Emit a safe placeholder instead.
             print(
-                f"{RED}Warning:{RESET} could not generate a function call for "
-                f"prompt {prompt.prompt!r}: {e}. Writing an empty placeholder.",
+                f"{RED}Warning:{RESET} could not generate a function call "
+                f"prompt {prompt.prompt!r}: {e}. Writing an empty "
+                "placeholder.",
                 file=sys.stderr,
             )
-            result = FunctionCallResult(prompt=prompt.prompt, name="invalid", parameters={})
+            result = FunctionCallResult(
+                prompt=prompt.prompt, name="invalid", parameters={}
+            )
         results.append(result.model_dump())
 
     with open(args.output, "w", encoding="utf-8") as f:
@@ -100,7 +108,8 @@ def main() -> None:
     try:
         sys.exit(run(args))
     except SystemExit:
-        raise  # from validate_prompts/validate_functions: already a clean message
+        # Validation helpers already supplied a clean error message.
+        raise
     except Exception as e:
         sys.exit(f"[ERROR]: Unexpected error: {e}")
 

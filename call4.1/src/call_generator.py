@@ -1,7 +1,9 @@
 # ABOUTME: Generates function calls from prompts using constrained decoding.
-# ABOUTME: Builds a fixed JSON template and fills each blank (name/number/integer/
-# ABOUTME: string/boolean) one token at a time, letting the model itself choose
-# ABOUTME: when each value is complete by competing a "stop" token against continuation.
+# ABOUTME: Builds a fixed JSON template and fills each blank
+# ABOUTME: (name/number/integer/
+# ABOUTME: string/boolean) one token at a time, letting the model itself
+# ABOUTME: choose when each value is complete by competing a "stop" token
+# ABOUTME: against continuation.
 
 from typing import Any
 
@@ -9,7 +11,7 @@ from .decoding import get_valid_next_tokens, mask_logits, select_next_token
 from .input_loader import FunctionDefinition, Prompt
 from .models import FunctionCallResult
 
-MAX_VALUE_TOKENS = 64  # safety cap: a value that never completes must not hang forever
+MAX_VALUE_TOKENS = 64  # safety cap for values that never complete
 
 
 def build_prompt(user_prompt: str, functions: list[FunctionDefinition]) -> str:
@@ -29,7 +31,9 @@ def build_prompt(user_prompt: str, functions: list[FunctionDefinition]) -> str:
         "Available functions:",
     ]
     for func in functions:
-        params = ", ".join(f"{name} ({p.type})" for name, p in func.parameters.items())
+        params = ", ".join(
+            f"{name} ({p.type})" for name, p in func.parameters.items()
+        )
         lines.append(f"- {func.name}({params}): {func.description}")
     lines.append("")
     lines.append(f'User request: "{user_prompt}"')
@@ -75,7 +79,8 @@ def generate_numeric_value(
     is_integer: bool,
     visualize: bool = False,
 ) -> tuple[float | int, str]:
-    """Generate a number or integer value, letting the model decide when to stop.
+    """Generate a number or integer value, letting the model decide when to
+    stop.
 
     At each step, valid digit/sign/dot continuations compete against the
     literal template text that follows the value (e.g. "," or "}") - once
@@ -132,7 +137,8 @@ def generate_numeric_value(
             print(
                 f"    [number] candidates={len(candidate_ids)} "
                 f"(value={len(valid_ids)}, stop={len(boundary_ids)})  "
-                f"{'STOP' if stopped else 'PICK'} -> {token_text_cache[next_id]!r}"
+                f"{'STOP' if stopped else 'PICK'} -> "
+                f"{token_text_cache[next_id]!r}"
             )
 
         if stopped:
@@ -144,7 +150,8 @@ def generate_numeric_value(
         text_so_far += addition
 
     raise ValueError(
-        f"Numeric value did not complete within the token limit (partial: {generated!r})"
+        "Numeric value did not complete within the token limit "
+        f"(partial: {generated!r})"
     )
 
 
@@ -209,7 +216,9 @@ def _find_repeating_tail(
         while pos - period >= 0 and text[pos - period:pos] == unit:
             repeats += 1
             pos -= period
-        if repeats >= min_repeats and (best is None or repeats * period > best[0] * best[1]):
+        if repeats >= min_repeats and (
+            best is None or repeats * period > best[0] * best[1]
+        ):
             best = (period, repeats)
     return best
 
@@ -221,7 +230,11 @@ def _unescape_string(text: str) -> str:
     result: list[str] = []
     i = 0
     while i < len(text):
-        if text[i] == "\\" and i + 1 < len(text) and text[i + 1] in ('"', "\\"):
+        if (
+            text[i] == "\\"
+            and i + 1 < len(text)
+            and text[i + 1] in ('"', "\\")
+        ):
             result.append(text[i + 1])
             i += 2
         else:
@@ -312,7 +325,8 @@ def generate_string_value(
             print(
                 f"    [string] candidates={len(candidate_ids)} "
                 f"(value={len(valid_ids)}, stop={len(boundary_ids)})  "
-                f"{'STOP' if stopped else 'PICK'} -> {token_text_cache[next_id]!r}  "
+                f"{'STOP' if stopped else 'PICK'} -> "
+                f"{token_text_cache[next_id]!r}  "
                 f"so_far={generated!r}"
             )
 
@@ -324,7 +338,8 @@ def generate_string_value(
         text_so_far += addition
 
     raise ValueError(
-        f"String value did not complete within the token limit (partial: {generated!r})"
+        "String value did not complete within the token limit "
+        f"(partial: {generated!r})"
     )
 
 
@@ -385,7 +400,8 @@ def generate_choice_value(
             print(
                 f"    [choice] candidates={len(candidate_ids)} "
                 f"(value={len(valid_ids)}, stop={len(boundary_ids)})  "
-                f"{'STOP' if stopped else 'PICK'} -> {token_text_cache[next_id]!r}  "
+                f"{'STOP' if stopped else 'PICK'} -> "
+                f"{token_text_cache[next_id]!r}  "
                 f"so_far={generated!r}"
             )
 
@@ -397,7 +413,8 @@ def generate_choice_value(
         text_so_far += addition
 
     raise ValueError(
-        f"Choice did not complete within the token limit (partial: {generated!r})"
+        "Choice did not complete within the token limit "
+        f"(partial: {generated!r})"
     )
 
 
@@ -460,9 +477,12 @@ def generate_function_call(
         is_last = index == len(items) - 1
         separator = "}" if is_last else ","
         text_so_far += f'"{param_name}": '
+        value: bool | str | float | int
 
         if visualize:
-            print(f"  {yellow}Generating {param_name} ({schema.type})...{reset}")
+            print(
+                f"  {yellow}Generating {param_name} ({schema.type})...{reset}"
+            )
 
         if schema.type == "string":
             text_so_far += '"'
@@ -502,4 +522,6 @@ def generate_function_call(
         text_so_far += "}"  # close an empty parameters object
     text_so_far += "}"  # close the outer object
 
-    return FunctionCallResult(prompt=prompt.prompt, name=name, parameters=parameters)
+    return FunctionCallResult(
+        prompt=prompt.prompt, name=name, parameters=parameters
+    )

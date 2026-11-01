@@ -1,16 +1,18 @@
-# ABOUTME: Read and validate call_me_maybe input files (functions_definition.json,
-# ABOUTME: function_calling_tests.json), exiting with a clear message on any failure.
+# ABOUTME: Read and validate call_me_maybe input JSON files, exiting with a
+# ABOUTME: clear message on any failure.
 
 import json
 import keyword
 import sys
 from typing import Any, Dict, NoReturn
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel, ConfigDict, Field, ValidationError, model_validator,
+)
 
 
 class Prompt(BaseModel):
-    """A single natural-language test prompt. Rejects empty or unexpected fields."""
+    """A natural-language test prompt; rejects empty or unexpected fields."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -33,7 +35,7 @@ class Parameter(BaseModel):
 
 
 class FunctionDefinition(BaseModel):
-    """A single callable function, as described in functions_definition.json."""
+    """A single callable function, as described in the definitions file."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -100,7 +102,9 @@ def validate_prompts(prompts_path: str) -> list[Prompt]:
     return prompts
 
 
-def validate_functions(functions_definition_path: str) -> list[FunctionDefinition]:
+def validate_functions(
+    functions_definition_path: str,
+) -> list[FunctionDefinition]:
     """Load and validate the function definitions file.
 
     Rejects duplicate function names, since the model would otherwise have
@@ -114,7 +118,9 @@ def validate_functions(functions_definition_path: str) -> list[FunctionDefinitio
     data = read_json(functions_definition_path)
 
     if not isinstance(data, list):
-        sys.exit(f"[ERROR]: '{functions_definition_path}' must contain a JSON array")
+        sys.exit(
+            f"[ERROR]: '{functions_definition_path}' must contain a JSON array"
+        )
     if not data:
         sys.exit(f"[ERROR]: '{functions_definition_path}' is empty")
 

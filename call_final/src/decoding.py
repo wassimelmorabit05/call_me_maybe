@@ -2,19 +2,21 @@
 # ABOUTME: masking invalid tokens to -inf and picking the best surviving one.
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy import ndarray
 
 
 def load_vocabulary(vocab_path: str) -> dict[str, int]:
-    """Load the raw token->id vocabulary mapping from the tokenizer's vocab file."""
+    """Load the raw token-to-ID mapping from the tokenizer vocabulary file."""
     with open(vocab_path, "r", encoding="utf-8") as file:
-        return json.load(file)
+        return cast(dict[str, int], json.load(file))
 
 
-def build_token_text_cache(model: Any, token_to_id: dict[str, int]) -> dict[int, str]:
+def build_token_text_cache(
+    model: Any, token_to_id: dict[str, int]
+) -> dict[int, str]:
     """Pre-decode every vocabulary token ID into its human-readable text, once.
 
     Done once per run (not once per generation step), and via model.decode()
@@ -35,12 +37,14 @@ def get_valid_next_tokens(
     choices: list[str],
     token_text_cache: dict[int, str],
 ) -> set[int]:
-    """Find token IDs that keep `current_prefix` a valid prefix of a known choice.
+    """Keep `current_prefix` a valid prefix of a known choice.
 
     Used both for the function name (choices = known function names) and for
     boolean values (choices = ["true", "false"]).
     """
-    candidates = [choice for choice in choices if choice.startswith(current_prefix)]
+    candidates = [
+        choice for choice in choices if choice.startswith(current_prefix)
+    ]
     valid_tokens: set[int] = set()
     for token_id, text in token_text_cache.items():
         new_prefix = current_prefix + text
@@ -75,5 +79,7 @@ def select_next_token(masked_logits: ndarray) -> int:
     """
     next_id = int(np.argmax(masked_logits))
     if not np.isfinite(masked_logits[next_id]):
-        raise ValueError("No valid token available for the current decoding state")
+        raise ValueError(
+            "No valid token available for the current decoding state"
+        )
     return next_id
